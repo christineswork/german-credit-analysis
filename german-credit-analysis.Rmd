@@ -1,0 +1,123 @@
+---
+title: "german_credit"
+author: "Christine Bui"
+output: html_document
+---
+
+Loading the dataset and renaming the columns to the English translations.
+```{r}
+kredit <- read.table("SouthGermanCredit.asc", header = TRUE, stringsAsFactors = TRUE)
+head(kredit)
+
+colnames(kredit)[1] = "status"
+colnames(kredit)[2] = "duration"
+colnames(kredit)[3] = "credit_history"
+colnames(kredit)[4] = "purpose"
+colnames(kredit)[5] = "amount"
+colnames(kredit)[6] = "savings"
+colnames(kredit)[7] = "employment_duration"
+colnames(kredit)[8] = "installment_rate"
+colnames(kredit)[9] = "personal_status_sex"
+colnames(kredit)[10] = "other_debtors"
+colnames(kredit)[11] = "present_residence"
+colnames(kredit)[12] = "property"
+colnames(kredit)[13] = "age"
+colnames(kredit)[14] = "other_installment_plans"
+colnames(kredit)[15] = "housing"
+colnames(kredit)[16] = "number_credits"
+colnames(kredit)[17] = "job"
+colnames(kredit)[18] = "people_liable"
+colnames(kredit)[19] = "telephone"
+colnames(kredit)[20] = "foreign_worker"
+colnames(kredit)[21] = "credit_risk"
+head(kredit)
+```
+
+Splitting the dataset into a training (70%) and testing set (30%).
+```{r}
+sample <- sample(c(TRUE, FALSE), nrow(kredit), replace = TRUE, prob = c(0.7, 0.3))
+train <- kredit[sample, ]
+test <- kredit[!sample, ]
+```
+
+Creating a logistic regression model using all features then narrowing down the relevant features to create a reduced model. 
+```{r}
+model <- glm(credit_risk ~ ., family = "binomial", data = kredit)
+summary(model)
+```
+```{r}
+# i will be finding relevant features by viewing each p-value; if the p-values are less than 0.05 then that feature is significant/relevant
+# after generating a summary of model, the most relevant predictors are status, duration, credit_history, amount, savings, employment_duration, installment_rate, personal_status_sex, property, and other_installment_plans
+
+# reduced model based on most relevant predictors 
+model2 <- glm(credit_risk ~ status + duration + credit_history + amount + savings + employment_duration + installment_rate + personal_status_sex + property + other_installment_plans, data = kredit, family = "binomial")
+summary(model2)
+```
+
+Plotting an ROC curve and finding AUC for the full and reduced models. 
+```{r}
+# installing and loading necessary package
+# install.packages("pROC")
+library(pROC)
+```
+```{r}
+# predict for full and reduced model (train data)
+pred_full_train <- predict(model, newdata = train, type = "response")
+pred_red_train <- predict(model2, newdata = train, type = "response")
+
+# creating our roc curves and auc 
+roc_full_train <- roc(train$credit_risk, pred_full_train, plot = TRUE, print.auc = TRUE, col = "green", lwd = 4, legacy.axes = TRUE, main = "ROC Curves and AUC for Training Data")
+roc_red_train <- roc(train$credit_risk, pred_red_train, plot = TRUE, print.auc = TRUE, col = "blue", lwd = 4, print.auc.y = 0.4, legacy.axes = TRUE, add = TRUE)
+legend("bottomright", legend = c("Full Model", "Reduced Model"), col = c("green", "blue"), lwd = 4)
+```
+
+The accuracy seems good since the AUC values are close together, both the full and reduced model have about the same performance. Since the AUC for full model is closer to 1, the full model gives us better predictions than the reduced model. The full model is most likely overfitted compared to the reduced model for training data.
+
+```{r}
+# predict for full and reduced model (test data)
+pred_full_test <- predict(model, newdata = test, type = "response")
+pred_red_test <- predict(model2, newdata = test, type = "response")
+
+# creating our roc curves and auc
+roc_full_test <- roc(test$credit_risk, pred_full_test, plot = TRUE, print.auc = TRUE, col = "green", lwd = 4, legacy.axes = TRUE, main = "ROC Curves and AUC for Testing Data")
+roc_red_test <- roc(test$credit_risk, pred_red_test, plot = TRUE, print.auc = TRUE, col = "blue", lwd = 4, print.auc.y = 0.4, legacy.axes = TRUE, add = TRUE)
+legend("bottomright", legend = c("Full Model", "Reduced Model"), col = c("green", "blue"), lwd = 4)
+```
+
+The accuracy seems good since the AUC values are close together, both the full and reduced model have about the same performance. The full and reduced model for testing data overfits the training data.
+
+Analyzing the dataset using LDA and QDA.
+```{r}
+# installing and loading necessary package
+# install.packages("MASS")
+library(MASS)
+```
+```{r}
+# creating lda model 
+lda_model <- lda(credit_risk ~ ., train)
+lda_model
+```
+
+Summary of LDA model: prior probability of 0 is 0.3045388 meaning that 30.5% of credit contracts have not been complied while prior probability of 1 is 0.6954612 meaning that 69.5% of credit contracts have been complied.
+
+```{r}
+# creating roc curve and auc for lda model 
+pred_lda_full <- predict(lda_model, test)
+lda_roc_full <- roc(test$credit_risk, pred_lda_full$posterior[,2], plot = TRUE, print.auc = TRUE, col = "green", main = "ROC Curve and AUC of LDA Model")
+```
+
+```{r}
+# creating qda model
+qda_model <- qda(credit_risk ~ ., train)
+qda_model
+```
+
+Summary of QDA model: prior probability of 0 is 0.3045388 meaning that 30.5% of credit contracts have not been complied while prior probability of 1 is 0.6954612 meaning that 69.5% of credit contracts have been complied. Prior probabilities are the same as LDA model. 
+
+```{r}
+# creating roc curve and auc for qda model
+pred_qda_full <- predict(qda_model, test)
+qda_roc_full <- roc(test$credit_risk, pred_qda_full$posterior[,2], plot = TRUE, print.auc = TRUE, col = "blue", main = "ROC Curve and AUC of QDA Model")
+```
+
+Comparison among LDA, QDA, and logistic regression results: When making comparisons among LDA, QDA, and logistic regression, the AUC for the LDA model is greater than the AUC for the QDA model. As mentioned earlier, for logistic regression, the testing data overfits the training data, there is not much difference between the full and reduced models. ROC curves and AUCs of the testing data from the logistic regression is greater than the ROC curves and AUCs of the training data, LDA model, and QDA model. Overall, the logistic regression model (especially for the testing data) is better especially for this data set/response variable for credit risk. 
